@@ -1,0 +1,256 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+local Characters = workspace:WaitForChild("Characters")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local whitelist = {
+	"Namecall Detected!"
+}
+local function tamper_table(ban_table, ban_index)
+	local expected = ban_table[ban_index]
+	table.insert(whitelist, expected)
+	local sanity_value
+	ban_table[ban_index] = nil
+	setrawmetatable(ban_table, {
+		__newindex = function(self, key, value)
+			if key == ban_index then
+				if table.find(whitelist, value) or (value:match("[^%d]%d+") ~= nil and rawlen(value) == 4) then
+					sanity_value = value
+				end
+				return
+			end
+			rawset(self, key, value)
+		end,
+		__index = function(self, key)
+			if key == ban_index then
+				if sanity_value then
+					local cache = sanity_value
+					sanity_value = nil
+					return cache
+				end
+				return expected
+			end
+		end
+	})
+	return true
+end
+local bypass = false
+local expected_index = 2
+for _, tbl in getgc(true) do
+	if type(tbl) == "table" and not getrawmetatable(tbl) then
+		local ban_table, ban_index
+		for i, v in tbl do
+			if type(v) == "number" and rawequal(v, expected_index) then
+				ban_index = v
+			end
+			if rawequal(v, tbl) then
+				ban_table = v
+			end
+		end
+		local ban_string = rawget(tbl, ban_index)
+		if ban_table and ban_index and ban_string and typeof(ban_string) == "string" and rawlen(ban_string) == 4 then
+			if tamper_table(ban_table, ban_index) then
+				bypass = true
+			end
+		end
+	end
+end
+if not bypass then
+	LocalPlayer:Kick("fail")
+	return
+end
+local terroristsFolder = Characters:FindFirstChild("Terrorists")
+local ctFolder = Characters:FindFirstChild("Counter-Terrorists")
+local function GetActualCharacter(player)
+	if not player then
+		return nil
+	end
+	local name = player.Name
+	if terroristsFolder and terroristsFolder:FindFirstChild(name) then
+		return terroristsFolder[name]
+	elseif ctFolder and ctFolder:FindFirstChild(name) then
+		return ctFolder[name]
+	end
+	return player.Character
+end
+local myTeam = nil
+local function updateMyTeam()
+	if terroristsFolder and terroristsFolder:FindFirstChild(LocalPlayer.Name) then
+		myTeam = "T"
+	elseif ctFolder and ctFolder:FindFirstChild(LocalPlayer.Name) then
+		myTeam = "CT"
+	else
+		myTeam = nil
+	end
+end
+local function IsEnemy(p)
+	if myTeam == nil then
+		return p.Team ~= LocalPlayer.Team
+	end
+	if terroristsFolder and terroristsFolder:FindFirstChild(p.Name) then
+		return myTeam ~= "T"
+	elseif ctFolder and ctFolder:FindFirstChild(p.Name) then
+		return myTeam ~= "CT"
+	end
+	return p.Team ~= LocalPlayer.Team
+end
+local function getEnemyHead()
+	local myChar = GetActualCharacter(LocalPlayer)
+	if not myChar then
+		return nil
+	end
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then
+		return nil
+	end
+	local nearest, nearestDist = nil, math.huge
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and IsEnemy(plr) then
+			local char = GetActualCharacter(plr)
+			if char then
+				local head = char:FindFirstChild("Head")
+				local root = char:FindFirstChild("HumanoidRootPart")
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if head and root and hum and hum.Health > 0 then
+					local dist = (myRoot.Position - root.Position).Magnitude
+					if dist < nearestDist then
+						nearestDist = dist
+						nearest = head
+					end
+				end
+			end
+		end
+	end
+	return nearest
+end
+local silentAimEnabled = false
+local cachedTarget = nil
+local lastUpdate = 0
+local UPDATE_INTERVAL = 0.05
+local hookInstalled = false
+local function updateTarget()
+	if not silentAimEnabled then
+		cachedTarget = nil
+		return
+	end
+	local now = tick()
+	if now - lastUpdate >= UPDATE_INTERVAL then
+		lastUpdate = now
+		updateMyTeam()
+		cachedTarget = getEnemyHead()
+	end
+end
+local function installHook()
+	if hookInstalled then
+		return true
+	end
+	local networkRemotes = RS:FindFirstChild("NetworkRemotes")
+	if not networkRemotes then
+		return false
+	end
+	local inventory = networkRemotes:FindFirstChild("Inventory")
+	if not inventory then
+		return false
+	end
+	local shootRemote = inventory:FindFirstChild("ShootWeapon")
+	if not shootRemote then
+		return false
+	end
+	local mt = getrawmetatable(game)
+	local oldNamecall = mt.__namecall
+	setreadonly(mt, false)
+	mt.__namecall = newcclosure(function(self, ...)
+		if getnamecallmethod() == "FireServer" and self == shootRemote then
+			if silentAimEnabled and cachedTarget and cachedTarget.Parent then
+				local args = table.pack(...)
+				local data = args[1]
+				if type(data) == "table" and type(data.Bullets) == "table" then
+					local headPos = cachedTarget.Position
+					for _, bullet in ipairs(data.Bullets) do
+						if bullet.Origin then
+							local dir = (headPos - bullet.Origin).Unit
+							local dist = (headPos - bullet.Origin).Magnitude
+							bullet.Direction = dir
+							bullet.Hits = {
+								{
+									Instance = cachedTarget,
+									Position = headPos,
+									Normal = Vector3.new(0, 1, 0),
+									Distance = dist,
+									Material = "SmoothPlastic",
+									Exit = false,
+								}
+							}
+						end
+					end
+				end
+				return oldNamecall(self, table.unpack(args, 1, args.n))
+			end
+		end
+		return oldNamecall(self, ...)
+	end)
+	setreadonly(mt, true)
+	hookInstalled = true
+	return true
+end
+RunService.Heartbeat:Connect(updateTarget)
+
+-- UI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SilentAimToggle"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = CoreGui
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 180, 0, 50)
+button.Position = UDim2.new(0, 10, 0, 10)
+button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+button.BorderSizePixel = 0
+button.Text = "Silent Aim: OFF"
+button.TextColor3 = Color3.fromRGB(255, 100, 100)
+button.Font = Enum.Font.GothamBold
+button.TextSize = 18
+button.Parent = screenGui
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = button
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0, 180, 0, 22)
+statusLabel.Position = UDim2.new(0, 10, 0, 65)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Hook: checking..."
+statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 13
+statusLabel.Parent = screenGui
+local hookOk = installHook()
+updateMyTeam()
+if hookOk then
+	statusLabel.Text = "Hook: OK"
+	statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+else
+	statusLabel.Text = "Hook: FAILED (retry on click)"
+	statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+end
+button.MouseButton1Click:Connect(function()
+	if not hookInstalled then
+		hookOk = installHook()
+		if hookOk then
+			statusLabel.Text = "Hook: OK"
+			statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+		else
+			statusLabel.Text = "Hook: FAILED"
+			statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+			return
+		end
+	end
+	silentAimEnabled = not silentAimEnabled
+	button.Text = silentAimEnabled and "Silent Aim: ON" or "Silent Aim: OFF"
+	button.TextColor3 = silentAimEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+	if silentAimEnabled then
+		lastUpdate = 0
+		updateTarget()
+	else
+		cachedTarget = nil
+	end
+end)

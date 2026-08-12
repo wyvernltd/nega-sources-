@@ -1,0 +1,241 @@
+local cfg = {
+    on = true,
+    bone = "Head",
+    fov = 360,
+    circle = true,
+    circleClr = Color3.fromRGB(255, 255, 255),
+    circleAlpha = 0.7,
+    wallCheck = false,
+    crosshairPriority = true,
+    key = Enum.KeyCode.F6,
+    teamCheck = true,
+    wallbang = true,
+}
+
+local plrs = game:GetService("Players")
+local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
+local ws = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local lp = plrs.LocalPlayer
+local cam = ws.CurrentCamera
+
+local InventoryController = require(ReplicatedStorage.Controllers.InventoryController)
+
+local circle = nil
+if cfg.circle and Drawing then
+    circle = Drawing.new("Circle")
+    circle.Visible = true
+    circle.Radius = 0
+    circle.Thickness = 1
+    circle.Color = cfg.circleClr
+    circle.Transparency = cfg.circleAlpha
+    circle.Filled = false
+    circle.NumSides = 64
+end
+
+local function pTeam(p)
+    return p:GetAttribute("Team")
+end
+
+local function isEnemy(p)
+    if p == lp then return false end
+    if not p.Character then return false end
+    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    if p.Character:GetAttribute("Invincible") == true then return false end
+    if cfg.teamCheck then
+        local mt = pTeam(lp)
+        local tt = pTeam(p)
+        if mt and tt and mt == tt then return false end
+    end
+    return true
+end
+
+local function getBone(ch)
+    return ch:FindFirstChild(cfg.bone)
+        or ch:FindFirstChild("Head")
+        or ch:FindFirstChild("HumanoidRootPart")
+        or ch.PrimaryPart
+end
+
+local function fovRadius()
+    if not cam then return 0 end
+    local vs = cam.ViewportSize
+    local hf = math.rad(cfg.fov / 2)
+    return math.tan(hf) * (vs.Y / (2 * math.tan(math.rad(cam.FieldOfView / 2))))
+end
+
+local function mkIgnore()
+    local t = {}
+    if lp.Character then table.insert(t, lp.Character) end
+    table.insert(t, cam)
+    local d = ws:FindFirstChild("Debris")
+    if d then table.insert(t, d) end
+    local m = ws:FindFirstChild("Map")
+    if m then
+        for _, n in ipairs({"Cameras", "Barriers", "Ambience"}) do
+            local c = m:FindFirstChild(n)
+            if c then table.insert(t, c) end
+        end
+        local z = m:FindFirstChild("Zones")
+        if z then
+            for _, n in ipairs({"Spawns", "Sites"}) do
+                local c = z:FindFirstChild(n)
+                if c then table.insert(t, c) end
+            end
+        end
+    end
+    return t
+end
+
+local function canSee(origin, tpos, ignore, ch)
+    local ci = table.clone(ignore)
+    table.insert(ci, ch)
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    rp.CollisionGroup = "Bullet"
+    rp.IgnoreWater = true
+    rp.FilterDescendantsInstances = ci
+    local r = ws:Raycast(origin, tpos - origin, rp)
+    return r == nil
+end
+
+local function getEnemyCharacters()
+    local chars = {}
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if isEnemy(p) and p.Character then
+            table.insert(chars, p.Character)
+        end
+    end
+    return chars
+end
+
+local function findTarget()
+    local best, bestVal = nil, math.huge
+    local cp = cam.CFrame.Position
+    local sc = cam.ViewportSize / 2
+    local fr = cfg.wallbang and math.huge or fovRadius()
+    local ig = mkIgnore()
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if not isEnemy(p) then continue end
+        local ch = p.Character
+        local bone = getBone(ch)
+        if not bone then continue end
+        local tp = bone.Position
+        if cfg.wallbang then
+            local v = (tp - cp).Magnitude
+            if v < bestVal then
+                bestVal = v
+                best = { p = p, ch = ch, pos = tp }
+            end
+        else
+            local sp, onScr = cam:WorldToViewportPoint(tp)
+            if not onScr then continue end
+            local sv = Vector2.new(sp.X, sp.Y)
+            local dc = (sv - sc).Magnitude
+            if dc > fr then continue end
+            if cfg.wallCheck and not canSee(cp, tp, ig, ch) then continue end
+            local v = cfg.crosshairPriority and dc or (tp - cp).Magnitude
+            if v < bestVal then
+                bestVal = v
+                best = { p = p, ch = ch, pos = tp }
+            end
+        end
+    end
+    return best
+end
+
+local function doAimRaycast(self, tgt)
+    local origin = cam.CFrame.Position
+    local dir = (tgt.pos - origin).Unit
+    local range = self.Properties and self.Properties.Range or 500
+
+    local rp = RaycastParams.new()
+    rp.IgnoreWater = false
+
+    if cfg.wallbang then
+        rp.FilterType = Enum.RaycastFilterType.Include
+        rp.FilterDescendantsInstances = getEnemyCharacters()
+    else
+        rp.FilterType = Enum.RaycastFilterType.Exclude
+        rp.CollisionGroup = "Bullet"
+        rp.FilterDescendantsInstances = mkIgnore()
+    end
+
+    local dist = (tgt.pos - origin).Magnitude
+    local hit = ws:Raycast(origin, dir * math.max(range, dist + 10), rp)
+    if hit and hit.Instance then
+        local mdl = hit.Instance:FindFirstAncestorOfClass("Model")
+        local hp = mdl and plrs:GetPlayerFromCharacter(mdl)
+        if hp and hp == tgt.p then
+            return {
+                Origin = origin,
+                Direction = dir,
+                Hits = {{
+                    Position = hit.Position,
+                    Instance = hit.Instance,
+                    Material = hit.Material.Name,
+                    Normal = hit.Normal,
+                    Exit = false,
+                }},
+                Distance = (hit.Position - origin).Magnitude,
+            }
+        end
+    end
+    return nil
+end
+
+local hookedWeapons = {}
+
+local function hookWeapon(weapon)
+    if not weapon or not weapon.Bullet then return end
+    if hookedWeapons[weapon] then return end
+    hookedWeapons[weapon] = true
+
+    local origPerform
+    origPerform = hookfunction(weapon.Bullet._performRaycast, newcclosure(function(self, spread)
+        local ok, res = pcall(origPerform, self, spread)
+        if not ok or not res then return nil end
+        if not cfg.on then return res end
+        local tgt = findTarget()
+        if not tgt then return res end
+        local aimed = doAimRaycast(self, tgt)
+        if aimed and aimed.Hits then return aimed end
+        return res
+    end))
+end
+
+hookWeapon(InventoryController.getCurrentEquipped())
+
+InventoryController.OnInventoryItemEquipped:Connect(function(_, weapon)
+    hookWeapon(weapon)
+end)
+
+uis.InputBegan:Connect(function(inp, gp)
+    if gp then return end
+    if inp.KeyCode == cfg.key then
+        cfg.on = not cfg.on
+        if circle then circle.Visible = cfg.on and cfg.circle end
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "SA",
+                Text = cfg.on and "ON" or "OFF",
+                Duration = 1,
+            })
+        end)
+    end
+end)
+
+if circle then
+    rs.RenderStepped:Connect(function()
+        cam = ws.CurrentCamera
+        if not cam then return end
+        local vs = cam.ViewportSize
+        circle.Position = Vector2.new(vs.X / 2, vs.Y / 2)
+        circle.Radius = fovRadius()
+        circle.Visible = cfg.on and cfg.circle
+    end)
+end
