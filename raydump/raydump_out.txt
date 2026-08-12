@@ -1,0 +1,66 @@
+=== raydump ===
+pid 6500   base 0x7FF67B6E0000   size 0x8F66000
+  .text   RVA 0x00001000  size 0x5EBE00C  [executable]
+  .rdata  RVA 0x05EC1000  size 0x1B4215E
+  .data   RVA 0x07A04000  size 0x10C6FDC
+  .rsrc   RVA 0x08E00000  size 0x5C7B8
+  .reloc  RVA 0x08E5D000  size 0x1068E0
+
+DataModel 0x272BE213E48  (located through the reflection system, no RVA used)
+
+--- discovered Instance layout ---
+  descriptor      +0x18   (default 0x18)
+  class name      +0x8    (default 0x8)
+  children        +0x78   (default 0x70)
+  parent          +0x68   (was 0x68)
+  name (ptr)      +0x70   (default 0x98)  inner +0x8
+  class base      +0x1b0  (was 0x230)
+  functions coll  +0xd0   (was 0x100)
+  properties coll +0x40   (was 0x40)
+  events coll     +0x88   (was 0xa0)
+
+  // Instance layout
+  constexpr uintptr_t inst_class_offset    = 0x18;
+  constexpr uintptr_t inst_children_offset = 0x78;   // stride 0x10
+  constexpr uintptr_t inst_parent_offset   = 0x68;
+  constexpr uintptr_t inst_name_offset     = 0x70;   // deref, then +0x8
+
+Workspace 0x272B59BD280   ClassDescriptor 0x7FF6840E14C0 (Workspace)   Name "Workspace"
+
+--- discovered ClassDescriptor layout ---
+  base class      +0x1b0  -> WorldRoot
+  base class      +0x340  -> RunningAverageTimeIntervalItem
+  base class      +0x388  -> RunningAverageTimeIntervalItem
+  base class      +0x3d0  -> RunningAverageTimeIntervalItem
+  base class      +0x418  -> RunningAverageTimeIntervalItem
+  base class      +0x460  -> RunningAverageTimeIntervalItem
+  base class      +0x490  -> StatsItem
+  base class      +0x580  -> RunningAverageItemDouble
+  base class      +0x5c8  -> RunningAverageItemDouble
+  function coll   +0xd0    (110 entries)
+  bound fn slot   +0x80  
+
+  // paste into Silent.cpp
+  constexpr uintptr_t desc_class_offset      = 0x18;
+  constexpr uintptr_t desc_base_class_offset = 0x1b0;
+  constexpr uintptr_t desc_functions_offset  = 0xd0;
+  constexpr uintptr_t desc_bound_fn_offset   = 0x80;
+
+--- ray family ---
+member                       descriptor         desc RVA     target RVA   state
+Raycast                      0x7FF6838C7150     0x81E7150    .text+0x2559DF0 clean
+FindPartOnRay                0x7FF6838C77F0     0x81E77F0    .text+0x25625E0 clean
+FindPartOnRayWithIgnoreList  0x7FF6838C78A0     0x81E78A0    .text+0x2562660 clean
+FindPartOnRayWithWhitelist   0x7FF6838C7950     0x81E7950    .text+0x25626F0 clean
+findPartOnRay                0x7FF6838C7CF0     0x81E7CF0    .text+0x25625E0 clean
+Spherecast                   0x7FF6838C7380     0x81E7380    .text+0x255B100 clean
+Blockcast                    0x7FF6838C6CC0     0x81E6CC0    .text+0x255AFB0 clean
+Shapecast                    0x7FF6838C7210     0x81E7210    .text+0x255B780 clean
+RaycastCachedTerrain         0x7FF6838C6B70     0x81E6B70    .text+0x255A290 clean
+
+9 of 9 ray members present
+
+Note: descriptor RVAs are informational. Silent.cpp resolves descriptors
+live through the reflection system and must NOT hardcode them - the old
+hardcoded RVAs pointed into an .rdata string table, which is why the
+hook never fired before 2026-07-27.

@@ -1,0 +1,45 @@
+=== instprobe ===
+pid 6500  base 0x7FF67B6E0000
+
+--- DataModel candidates: 11 ---
+
+  instance 0x7FF6835B1160  ic=+0x30 cn=+0x8  .data+0x4CE000  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x272A106F280  ic=+0x40 cn=+0x8  .data+0x79DB80  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x272A106F298  ic=+0x28 cn=+0x8  .data+0x79DB88  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x272A106F2A0  ic=+0x20 cn=+0x8  .data+0x79DC20  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x272A106F2B8  ic=+0x8 cn=+0x8  .data+0x79DC28  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x7FF6838BDD50  ic=+0x30 cn=+0x8  .data+0x7DA250  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x7FF6838BDE10  ic=+0x30 cn=+0x8  .data+0x7DA310  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x7FF6838BDF80  ic=+0x30 cn=+0x8  .data+0x7DA470  (direct)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x272E21EE3A0  ic=+0x40 cn=+0x8  .data+0x935638  (via +0x1D0)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x7FF6835B1550  ic=+0x30 cn=+0x8  .data+0x10100D8  (via +0x1D0)
+      no child container found in +0x00..0x400 (<=2 hops)
+
+  instance 0x272BE213E48  ic=+0x18 cn=+0x8  .data+0x1059748  (via +0x1D0)
+      children +0x78   hops=1         stride 0x10  146 entries  15 services
+       Workspace RunService GuiService Stats TimerService SoundService VideoCaptureService NonReplicatedCSGDictionaryService CSGDictionaryService LogService
+
+      // this is the real one
+      inst_class_offset    = 0x18;
+      cls_name_offset      = 0x8;
+      inst_children_offset = 0x78;   // stride 0x10, 1 hop(s)
+
+1 of 11 candidates had a child container.
